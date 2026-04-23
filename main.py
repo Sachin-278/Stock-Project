@@ -1061,7 +1061,7 @@ with tab7:
                                 fig_ny.add_hline(y=val, line_dash="dot", line_color="red", annotation_text=lbl, opacity=0.4)
                         
                         fig_ny.update_layout(
-                            title=f"{midnight_symbol} - 1m Local NY Format (UTC-4) - {midnight_data.get('killzone_name', 'Midnight/NY Open')}",
+                            title=f"{target_column} - 1m Local NY Format (UTC-4) - {midnight_data.get('killzone_name', 'Midnight/NY Open')}",
                             xaxis_title="Time (UTC-4)",
                             yaxis_title="Price ($)",
                             template="plotly_dark",
