@@ -16,6 +16,7 @@ from tradingview_integration import create_tradingview_embed, create_tradingview
 import io
 import os
 from streamlit_autorefresh import st_autorefresh
+from tvDatafeed import TvDatafeed, Interval
 
 # Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="datarefresh")
@@ -53,6 +54,54 @@ for category, symbols in asset_categories.items():
 
 # Select target with categories
 st.sidebar.header("🎯 Asset Selection")
+
+# Initialize TV Datafeed (Cached for performance)
+@st.cache_resource
+def get_tv_connection():
+    return TvDatafeed()
+
+def refresh_tv_cache(symbol, interval_str):
+    """Update local cache file for a symbol and interval if needed"""
+    cache_dir = "tv_live_cache"
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+        
+    cache_file = f"{cache_dir}/{symbol}_{interval_str}.csv"
+    
+    # Check if update is needed (every 5 minutes)
+    needs_update = True
+    if os.path.exists(cache_file):
+        mtime = os.path.getmtime(cache_file)
+        if (datetime.now().timestamp() - mtime) < 300: # 5 minutes
+            needs_update = False
+            
+    if needs_update:
+        try:
+            tv = get_tv_connection()
+            # Mapping logic similar to collector
+            mapping = {
+                'XAUUSD': ('OANDA', 'XAUUSD'), 'XAGUSD': ('OANDA', 'XAGUSD'),
+                'BTC': ('BINANCE', 'BTCUSDT'), 'EURUSD': ('FX_IDC', 'EURUSD'),
+                'WTI_CRUDE': ('NYMEX', 'CL1!'), 'RELIANCE': ('NSE', 'RELIANCE')
+            }
+            
+            exchange, tv_symbol = mapping.get(symbol, ('NASDAQ', symbol))
+            
+            tf_tv_map = {
+                '1m': Interval.in_1_minute, '5m': Interval.in_5_minute,
+                '15m': Interval.in_15_minute, '1h': Interval.in_1_hour, '1d': Interval.in_daily
+            }
+            
+            df = tv.get_hist(symbol=tv_symbol, exchange=exchange, 
+                             interval=tf_tv_map.get(interval_str, Interval.in_1_hour), n_bars=500)
+            
+            if df is not None and not df.empty:
+                df.to_csv(cache_file)
+                return True
+        except Exception as e:
+            print(f"TV Fetch Error: {e}")
+    return False
+
 selected_category = st.sidebar.selectbox("Select Asset Category", options=list(asset_categories.keys()))
 
 # Get symbols for selected category
@@ -739,6 +788,9 @@ with tab7:
                 
             yf_period = "1y"
             yf_interval = tf_map[selected_tf_label]  # always a valid Yahoo Finance interval
+
+            # --- AUTO-REFRESH LIVE DATA ---
+            refresh_tv_cache(target_column, yf_interval)
 
             # --- TRADINGVIEW CACHE LOADING ---
             cache_file = f"tv_live_cache/{target_column}_{yf_interval}.csv"
