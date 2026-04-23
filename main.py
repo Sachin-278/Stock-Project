@@ -224,17 +224,29 @@ yahoo_mapping = {
 # Fetch live data
 @st.cache_data(ttl=60)
 def get_live_data(symbol):
-    """Fetch live stock data"""
+    """Fetch live stock data from TradingView cache or yfinance"""
     try:
+        # First try TV Cache
+        refresh_tv_cache(symbol, '1d')
+        cache_file = f"tv_live_cache/{symbol}_1d.csv"
+        
+        if os.path.exists(cache_file):
+            df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+            if not df.empty:
+                # TV returns 'close' (lower)
+                price = df['close'].iloc[-1] if 'close' in df.columns else df['Close'].iloc[-1]
+                avg = df['close'].tail(50).mean() if 'close' in df.columns else df['Close'].tail(50).mean()
+                return price, avg
+        
+        # Fallback to yfinance
         yahoo_symbol = yahoo_mapping.get(symbol, symbol)
         ticker = yf.Ticker(yahoo_symbol)
-
         hist = ticker.history(period='1y')
         if len(hist) > 0:
             return hist['Close'].iloc[-1], hist['Close'].iloc[-50:].mean()
         return None, None
     except Exception as e:
-        st.warning(f"Unable to fetch live data for {symbol}: {str(e)}")
+        print(f"Live Data Fetch Error for {symbol}: {e}")
         return None, None
 
 # Get current prices for category symbols
@@ -974,11 +986,8 @@ with tab7:
                 # Ensure 1m cache is fresh for the midnight logic
                 refresh_tv_cache(target_column, '1m')
                 
-                # Use base symbol if we are looking at something complex or try default target column
-                # Use central yahoo_mapping for consistent symbol resolution across all asset types
-                midnight_symbol = yahoo_mapping.get(target_column, target_column)
-                
-                midnight_data = ICTStrategy.calculate_midnight_setup(midnight_symbol)
+                # Pass target_column directly to ensure cache file names match
+                midnight_data = ICTStrategy.calculate_midnight_setup(target_column)
                 
             if "error" in midnight_data:
                 st.error(midnight_data["error"])

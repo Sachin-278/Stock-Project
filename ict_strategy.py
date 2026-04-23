@@ -165,12 +165,17 @@ class ICTStrategy:
                 except:
                     pass
 
-            if hist.empty:
                 # Fallback to yfinance if no cache
                 yf_symbol = symbol
-                if symbol == 'BTC': yf_symbol = 'BTC-USD'
-                if symbol == 'XAUUSD': yf_symbol = 'XAUUSD=X'
-                if symbol == 'XAGUSD': yf_symbol = 'XAGUSD=X'
+                # Handle internal names and common symbols for yfinance
+                metal_map = {
+                    'GOLD': 'XAUUSD=X', 'XAUUSD': 'XAUUSD=X',
+                    'SILVER': 'XAGUSD=X', 'XAGUSD': 'XAGUSD=X',
+                    'PLATINUM': 'XPTUSD=X', 'XPTUSD': 'XPTUSD=X',
+                    'COPPER': 'HG=F', 'XCUUSD': 'HG=F',
+                    'BTC': 'BTC-USD'
+                }
+                yf_symbol = metal_map.get(symbol, symbol)
                 
                 ticker = yf.Ticker(yf_symbol)
                 hist = ticker.history(period="5d", interval="1m")
