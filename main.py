@@ -81,9 +81,9 @@ def refresh_tv_cache(symbol, interval_str):
             # Expanded mapping for all metals, commodities and forex
             mapping = {
                 # Metals (Internal & Display names)
-                'XAUUSD': ('OANDA', 'XAUUSD'), 'GOLD': ('OANDA', 'XAUUSD'),
+                'XAUUSD': ('SAXO', 'XAUUSD'), 'GOLD': ('SAXO', 'XAUUSD'),
                 'XAGUSD': ('OANDA', 'XAGUSD'), 'SILVER': ('OANDA', 'XAGUSD'),
-                'XPTUSD': ('OANDA', 'XPTUSD'), 'PLATINUM': ('OANDA', 'XPTUSD'),
+                'XPTUSD': ('SAXO', 'XPTUSD'), 'PLATINUM': ('SAXO', 'XPTUSD'),
                 'XCUUSD': ('COMEX', 'HG1!'), 'COPPER': ('COMEX', 'HG1!'),
                 
                 # US Stocks
@@ -234,9 +234,11 @@ def get_live_data(symbol):
             df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
             if not df.empty:
                 # TV returns 'close' (lower)
-                price = df['close'].iloc[-1] if 'close' in df.columns else df['Close'].iloc[-1]
-                avg = df['close'].tail(50).mean() if 'close' in df.columns else df['Close'].tail(50).mean()
-                return price, avg
+                price_col = 'close' if 'close' in df.columns else 'Close'
+                if price_col in df.columns:
+                    price = df[price_col].iloc[-1]
+                    avg = df[price_col].tail(50).mean()
+                    return price, avg
         
         # Fallback to yfinance
         yahoo_symbol = yahoo_mapping.get(symbol, symbol)
@@ -244,8 +246,10 @@ def get_live_data(symbol):
         hist = ticker.history(period='1y')
         if len(hist) > 0:
             return hist['Close'].iloc[-1], hist['Close'].iloc[-50:].mean()
+        
         return None, None
     except Exception as e:
+        # Log to console for dev
         print(f"Live Data Fetch Error for {symbol}: {e}")
         return None, None
 
