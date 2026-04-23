@@ -1,75 +1,74 @@
-import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import warnings
+from tvDatafeed import TvDatafeed, Interval
 
-# Stock symbols
-stocks = ['AMZN', 'DPZ', 'BTC-USD', 'NFLX']
+warnings.filterwarnings('ignore')
+
+# Symbols to update
+symbols_to_update = {
+    'AMZN': ('NASDAQ', 'AMZN'),
+    'DPZ': ('NYSE', 'DPZ'),
+    'NFLX': ('NASDAQ', 'NFLX'),
+    'AAPL': ('NASDAQ', 'AAPL'),
+    'XAUUSD': ('OANDA', 'XAUUSD'),
+    'XAGUSD': ('OANDA', 'XAGUSD'),
+    'XPTUSD': ('OANDA', 'XPTUSD'),
+    'BTC': ('BINANCE', 'BTCUSDT')
+}
+
 csv_file = 'stock_data.csv'
 
-# Read existing data to find the last date
-if os.path.exists(csv_file):
-    existing_df = pd.read_csv(csv_file)
-    existing_df['Date'] = pd.to_datetime(existing_df['Date'], format='%m/%d/%Y')
-    last_date = existing_df['Date'].max()
-    print(f"Last date in existing data: {last_date.date()}")
-else:
-    last_date = pd.to_datetime('2013-05-01')
-    print(f"No existing file found. Starting from: {last_date.date()}")
-
-# Download latest data from last_date to today
-end_date = datetime.now()
-start_date = last_date + timedelta(days=1)
-
-print(f"\nFetching data from {start_date.date()} to {end_date.date()}...")
-
-try:
-    # Fetch data for all stocks
-    data_dict = {}
-    for symbol in stocks:
-        print(f"Downloading {symbol}...")
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(start=start_date, end=end_date)
-        
-        if len(hist) > 0:
-            data_dict[symbol] = hist['Close']
-        else:
-            print(f"  No new data for {symbol}")
+def update_data():
+    print("Starting data update from TradingView...")
+    tv = TvDatafeed()
     
-    if not data_dict:
-        print("No new data available for any stock.")
+    # Read existing data
+    if os.path.exists(csv_file):
+        existing_df = pd.read_csv(csv_file)
+        existing_df['Date'] = pd.to_datetime(existing_df['Date'])
+        print(f"Loaded existing data with {len(existing_df)} rows.")
     else:
-        # Create DataFrame from downloaded data
-        new_df = pd.DataFrame(data_dict)
-        new_df.index.name = 'Date'
-        new_df = new_df.reset_index()
-        new_df['Date'] = pd.to_datetime(new_df['Date'])
-        
-        # Rename BTC-USD to BTC for consistency
-        if 'BTC-USD' in new_df.columns:
-            new_df = new_df.rename(columns={'BTC-USD': 'BTC'})
-        
-        # Reorder columns to match original format
-        new_df = new_df[['Date', 'AMZN', 'DPZ', 'BTC', 'NFLX']]
-        
-        # Combine with existing data
-        if os.path.exists(csv_file):
-            combined_df = pd.concat([existing_df, new_df], ignore_index=True)
-            combined_df['Date'] = pd.to_datetime(combined_df['Date'])
-            combined_df = combined_df.drop_duplicates(subset=['Date'], keep='last')
-            combined_df = combined_df.sort_values('Date')
-            combined_df = combined_df.reset_index(drop=True)
-        else:
-            combined_df = new_df
-        
-        # Convert date back to MM/DD/YYYY format for CSV
-        combined_df['Date'] = combined_df['Date'].dt.strftime('%m/%d/%Y')
-        
-        # Save to CSV
-        combined_df.to_csv(csv_file, index=False)
-        print(f"\n✅ Updated {csv_file} successfully!")
-        print(f"Total rows: {len(combined_df)}")
-        print(f"Date range: {combined_df['Date'].min()} to {combined_df['Date'].max()}")
+        existing_df = pd.DataFrame()
+        print("No existing data found. Creating new file.")
 
-except Exception as e:
-    print(f"❌ Error: {e}")
+    all_new_data = {}
+    
+    for app_symbol, (exchange, tv_symbol) in symbols_to_update.items():
+        print(f"Fetching {app_symbol} ({tv_symbol})...")
+        try:
+            df = tv.get_hist(symbol=tv_symbol, exchange=exchange, interval=Interval.in_daily, n_bars=100)
+            if df is not None and not df.empty:
+                # tvDatafeed returns 'close' (lowercase)
+                all_new_data[app_symbol] = df['close']
+                print(f"  Successfully fetched {len(df)} days of data.")
+            else:
+                print(f"  Warning: No data returned for {app_symbol}")
+        except Exception as e:
+            print(f"  Error fetching {app_symbol}: {e}")
+
+    if not all_new_data:
+        print("No data was fetched. Exiting.")
+        return
+
+    # Create new DataFrame
+    new_df = pd.DataFrame(all_new_data)
+    new_df.index.name = 'Date'
+    new_df = new_df.reset_index()
+    new_df['Date'] = pd.to_datetime(new_df['Date'])
+
+    # Combine
+    if not existing_df.empty:
+        combined = pd.concat([existing_df, new_df]).drop_duplicates(subset=['Date'], keep='last')
+        combined = combined.sort_values('Date').reset_index(drop=True)
+    else:
+        combined = new_df
+
+    # Save
+    combined.to_csv(csv_file, index=False)
+    print(f"\nSuccessfully updated {csv_file}")
+    print(f"Latest Date: {combined['Date'].max().date()}")
+
+if __name__ == "__main__":
+    update_data()

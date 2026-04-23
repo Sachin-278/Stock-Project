@@ -971,6 +971,9 @@ with tab7:
             st.markdown("Identifies the London/New York midnight crossover algorithmic sweep. Retrieves highly specific 1-min standard deviations and 1st FVG validation metrics natively via live data fetching.")
             
             with st.spinner("Fetching Live 1-Minute Algorithm Data..."):
+                # Ensure 1m cache is fresh for the midnight logic
+                refresh_tv_cache(target_column, '1m')
+                
                 # Use base symbol if we are looking at something complex or try default target column
                 # Use central yahoo_mapping for consistent symbol resolution across all asset types
                 midnight_symbol = yahoo_mapping.get(target_column, target_column)

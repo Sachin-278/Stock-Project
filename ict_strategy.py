@@ -141,22 +141,44 @@ class ICTStrategy:
     def calculate_midnight_setup(symbol):
         """
         Calculates the Midnight (London Open Killzone) Setup:
-        - Fetches 1-minute data via yfinance.
+        - Checks local tv_live_cache for 1-minute data.
+        - Falls back to yfinance if cache is missing.
         - Isolates strictly 12:01 AM to 12:29 AM in New York Time (UTC-4).
-        - Extrapolates the High and Low points inside this window.
-        - Identifies the first Fair Value Gap (FVG) constructed inside the window.
-        - Calculates bidirectional standard deviation targets from the range.
         """
         try:
-            ticker = yf.Ticker(symbol)
-            # Fetch last 5 days to ensure we grab the most recent valid market day
-            hist = ticker.history(period="5d", interval="1m")
+            import os
+            cache_file = f"tv_live_cache/{symbol}_1m.csv"
+            hist = pd.DataFrame()
+
+            if os.path.exists(cache_file):
+                try:
+                    hist = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+                    # Convert TV columns (lower) to Title Case for strategy consistency
+                    if 'close' in hist.columns:
+                        hist = hist.rename(columns={
+                            'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'
+                        })
+                    # TV data is usually UTC, convert to NY
+                    if hist.index.tz is None:
+                        hist.index = hist.index.tz_localize('UTC')
+                    hist.index = hist.index.tz_convert('America/New_York')
+                except:
+                    pass
+
+            if hist.empty:
+                # Fallback to yfinance if no cache
+                yf_symbol = symbol
+                if symbol == 'BTC': yf_symbol = 'BTC-USD'
+                if symbol == 'XAUUSD': yf_symbol = 'XAUUSD=X'
+                if symbol == 'XAGUSD': yf_symbol = 'XAGUSD=X'
+                
+                ticker = yf.Ticker(yf_symbol)
+                hist = ticker.history(period="5d", interval="1m")
+                if not hist.empty:
+                    hist.index = hist.index.tz_convert('America/New_York')
             
             if hist.empty:
                 return {"error": "No 1-minute data available for this symbol."}
-                
-            # Convert timezone strictly to New York / EST (UTC-4 equivalent handling)
-            hist.index = hist.index.tz_convert('America/New_York')
             
             unique_dates = pd.Series(hist.index.date).unique()[::-1]
             valid_window = None
