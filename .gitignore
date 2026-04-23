@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+env/
+
+# Project Specific
+stock_data.csv
+tv_live_cache/
+oracleJdk-26/
+*.txt
+*.log
+
+# IDEs
+.vscode/
+.idea/
